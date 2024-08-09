@@ -28,6 +28,10 @@ Get ready to embark on your LLM journey with Airflow! Here's how to get started:
 First, install the Ollama-Airflow-Operator package:
 
 ```bash
+pip install airflow-ollama
+```
+OR
+```bash
 pip install git+https://github.com/KarmaloopAI/Ollama-Airflow-Operator.git
 ```
 
