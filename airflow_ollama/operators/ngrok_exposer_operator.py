@@ -1,7 +1,9 @@
 import os
 import subprocess
+import time
+import requests
 from pathlib import Path
-from airflow.models import BaseOperator
+from airflow.models import BaseOperator, Variable
 from airflow.utils.decorators import apply_defaults
 from typing import Optional
 
@@ -27,6 +29,8 @@ class NgrokExposerOperator(BaseOperator):
             self._install_ngrok()
         self._set_auth_token()
         self._start_ngrok()
+        ngrok_url = self._get_ngrok_url()
+        self._set_airflow_variable(ngrok_url)
 
     def _install_ngrok(self):
         self.log.info("Installing ngrok...")
@@ -50,6 +54,28 @@ class NgrokExposerOperator(BaseOperator):
 
     def _start_ngrok(self):
         self.log.info(f"Starting ngrok to expose port {self.port}...")
-        ngrok_cmd = f"nohup {self.ngrok_path} http {self.port} --log=stdout > ngrok.log 2>&1 &"
+        ngrok_cmd = f'nohup {self.ngrok_path} http {self.port} --host-header="localhost:11434" --log=stdout > ngrok.log 2>&1 &'
         subprocess.run(ngrok_cmd, shell=True, check=True)
         self.log.info(f"ngrok started in the background, exposing port {self.port}.")
+
+    def _get_ngrok_url(self):
+        self.log.info("Fetching Ngrok URL...")
+        retries = 5
+        while retries > 0:
+            try:
+                response = requests.get("http://localhost:4040/api/tunnels")
+                data = response.json()
+                ngrok_url = data['tunnels'][0]['public_url']
+                self.log.info(f"Ngrok URL fetched successfully: {ngrok_url}")
+                return ngrok_url
+            except Exception as e:
+                self.log.warning(f"Failed to fetch Ngrok URL. Retrying... Error: {str(e)}")
+                retries -= 1
+                time.sleep(2)
+        
+        raise Exception("Failed to fetch Ngrok URL after multiple attempts")
+
+    def _set_airflow_variable(self, ngrok_url):
+        self.log.info("Setting Airflow variable OLLAMA_URL...")
+        Variable.set("OLLAMA_URL", ngrok_url)
+        self.log.info(f"Airflow variable OLLAMA_URL set to: {ngrok_url}")
